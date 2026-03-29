@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<title>How To Use AI</title>
+
+<style>
+
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+
+  background-color: #0b1f3a !important; /* dark blue */
+  color: white !important;
+  position: relative;
+  z-index: 0;
+}
+
+.navbar{
+display:flex;
+justify-content:center;
+gap:30px;
+padding:20px;
+background:#39c4e3;
+zindex = 30;
+}
+
+.navbar a{
+background:white;
+padding:14px 30px;
+border-radius:40px;
+text-decoration:none;
+font-size:20px;
+color:#39c4e3;
+font-weight:bold;
+zindex = 30;
+}
+
+.container{
+max-width:900px;
+margin:auto;
+padding:40px;
+text-align:left;
+zindex = 3;
+}
+
+h1{
+text-align:center;
+font-size:50px;
+zindex = 30;
+}
+
+.tip{
+padding:20px;
+margin-top:20px;
+border-radius:12px;
+box-shadow:0 4px 10px rgba(0,0,0,0.1);
+zindex = 30;
+background: rgba(255, 255, 255, 0.09);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+</style>
+
+</head>
+
+<body>
+<canvas id="fluid-bg"></canvas>
+<style>
+#fluid-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+
+  z-index: -999;
+
+  pointer-events: none;
+}
+</style>
+<script>
+const canvas = document.getElementById("fluid-bg");
+const ctx = canvas.getContext("2d");
+
+let scale = 0.5;
+let w, h;
+let density, vx, vy;
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  w = Math.floor(canvas.width * scale);
+  h = Math.floor(canvas.height * scale);
+
+  density = new Float32Array(w * h);
+  vx = new Float32Array(w * h);
+  vy = new Float32Array(w * h);
+}
+window.addEventListener("resize", resize);
+resize();
+
+let mouse = { x: 0, y: 0, dx: 0, dy: 0 };
+
+function applyForce(mx, my, dx, dy, radius = 40) {
+  let len = Math.sqrt(dx*dx + dy*dy) + 0.0001;
+  let dirX = dx / len;
+  let dirY = dy / len;
+
+  for (let y = -radius; y < radius; y++) {
+    for (let x = -radius; x < radius; x++) {
+      let px = (mx + x) | 0;
+      let py = (my + y) | 0;
+
+      if (px > 1 && px < w-1 && py > 1 && py < h-1) {
+        let i = py * w + px;
+        let d = Math.sqrt(x*x + y*y);
+
+        if (d < radius) {
+          let f = (1 - d / radius);
+
+          vx[i] += dirX * f * 3.5;
+          vy[i] += dirY * f * 3.5;
+
+          density[i] += f * 60;
+        }
+      }
+    }
+  }
+}
+
+window.addEventListener("mousemove", (e) => {
+  let mx = e.clientX * scale;
+  let my = e.clientY * scale;
+
+  mouse.dx = mx - mouse.x;
+  mouse.dy = my - mouse.y;
+
+  mouse.x = mx;
+  mouse.y = my;
+
+  applyForce(mx, my, mouse.dx, mouse.dy);
+});
+
+window.addEventListener("click", (e) => {
+  let mx = e.clientX * scale;
+  let my = e.clientY * scale;
+
+  applyForce(mx, my, 5, 5, 60);
+});
+
+let time = 0;
+
+function step() {
+  let newDensity = new Float32Array(w * h);
+  time += 0.01;
+
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      let i = y * w + x;
+
+      vx[i] += Math.sin(y * 0.02 + time) * 0.003;
+      vy[i] += Math.cos(x * 0.02 + time) * 0.003;
+
+      let px = (x - vx[i]) | 0;
+      let py = (y - vy[i]) | 0;
+
+      px = Math.max(0, Math.min(w - 1, px));
+      py = Math.max(0, Math.min(h - 1, py));
+
+      let pi = py * w + px;
+
+      newDensity[i] = density[pi] * 0.996;
+
+      vx[i] *= 0.985;
+      vy[i] *= 0.985;
+    }
+  }
+
+  density = newDensity;
+}
+
+function draw() {
+  let img = ctx.createImageData(w, h);
+  let data = img.data;
+
+  for (let i = 0; i < density.length; i++) {
+    let d = density[i];
+    let idx = i * 4;
+
+    // Clamp + normalize density
+    let intensity = Math.max(0, Math.min(1, d / 150));
+
+    // Blue wave gradient
+    let r = 10 + intensity * 30;     // low red
+    let g = 80 + intensity * 120;    // medium green (teal tint)
+    let b = 180 + intensity * 75;    // strong blue
+
+    data[idx]     = r;
+    data[idx + 1] = g;
+    data[idx + 2] = b;
+    data[idx + 3] = Math.min(255, intensity * 255);
+  }
+
+  let temp = document.createElement("canvas");
+  temp.width = w;
+  temp.height = h;
+  let tctx = temp.getContext("2d");
+
+  tctx.putImageData(img, 0, 0);
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  ctx.globalCompositeOperation = "screen";
+  ctx.filter = "blur(10px) brightness(1.4) contrast(1.2)";
+  ctx.drawImage(temp, 0, 0, canvas.width, canvas.height);
+
+  ctx.filter = "blur(2px)";
+  ctx.drawImage(canvas, 0, 0);
+
+  ctx.globalCompositeOperation = "source-over";
+  ctx.filter = "none";
+}
+
+function loop() {
+  step();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+<div class="navbar">
+<a href="index.html">Home</a>
+<a href="page1.html">Browse</a>
+<a href="page2.html">Learn</a>
+</div>
+
+<div class="container">
+
+<h1>How To Use AI</h1>
+
+<div class="tip">
+<h2>1. Be Specific</h2>
+<p>Instead of saying "help with homework", say "explain Newton's laws in simple terms".</p>
+</div>
+
+<div class="tip">
+<h2>2. Give Context</h2>
+<p>Tell the AI what you are doing. Example: "I am writing a school essay about climate change."</p>
+</div>
+
+<div class="tip">
+<h2>3. Ask For Formats</h2>
+<p>You can request lists, summaries, or step-by-step instructions.</p>
+</div>
+
+<div class="tip">
+<h2>4. Improve Your Prompt</h2>
+<p>If the answer isn't good, ask again with more details.</p>
+</div>
+
+<div class="tip">
+<h2>5. Example Prompt</h2>
+
+<p><b>Bad:</b> write essay</p>
+
+<p><b>Good:</b> Write a 300 word essay explaining how solar energy works for a middle school student.</p>
+
+</div>
+
+</div>
+
+</body>
+</html>
